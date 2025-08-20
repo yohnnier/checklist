@@ -7,7 +7,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <style>
-        /* El CSS es el mismo, no necesita cambios */
         :root {
             --primary-color: #007bff; --secondary-color: #f8f9fa; --text-color: #343a40;
             --border-color: #dee2e6; --shadow-color: rgba(0, 0, 0, 0.1); --completed-color: #6c757d;
@@ -28,7 +27,6 @@
         #dynamic-subtitle { text-align: center; color: var(--primary-color); font-size: 22px; font-weight: bold; margin-top: 10px; margin-bottom: 20px; }
         #export-btn { background-color: var(--primary-color); color: white; border: none; border-radius: 8px; padding: 12px 20px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease; display: block; width: 100%; margin-top: 20px; }
         #export-btn:hover { background-color: #0056b3; }
-        #export-btn:disabled { background-color: #6c757d; cursor: not-allowed; }
         #checklist { list-style: none; padding: 0; margin: 0; }
         .checklist-item { display: flex; align-items: center; padding: 12px 5px; border-bottom: 1px solid var(--border-color); }
         .checklist-item.completed .step-input { text-decoration: line-through; color: var(--completed-color); }
@@ -101,77 +99,60 @@
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
         
-        function getImageAsBase64(url, callback) {
-            const image = new Image();
-            image.setAttribute('crossOrigin', 'anonymous'); 
-            image.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = image.width; canvas.height = image.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(image, 0, 0);
-                const dataURL = canvas.toDataURL('image/png');
-                callback(dataURL);
-            };
-            image.onerror = () => {
-                alert('No se pudo cargar la imagen del encabezado. Verifique su conexión a internet o que la URL de la imagen sea correcta.');
-                callback(null);
-            };
-            image.src = url;
-        }
-
+        // --- LÓGICA DE EXPORTACIÓN DE TEXTO LIMPIO (SIN IMAGEN) ---
         exportBtn.addEventListener('click', () => {
-            exportBtn.disabled = true;
-            exportBtn.textContent = 'Generando PDF...';
-
-            // --- LA URL HA SIDO CORREGIDA AQUÍ ---
-            const imageUrl = 'https://asenfovalle.cl/wp-content/uploads/2023/08/Diseno-sin-titulo-3-1.png';
-
-            getImageAsBase64(imageUrl, (imageData) => {
-                if (!imageData) {
-                    exportBtn.disabled = false;
-                    exportBtn.textContent = '📄 Generar y Descargar PDF';
-                    return;
-                }
-
+            try {
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
-                const imgWidth = 140; const imgHeight = 37;
-                const xPos = (doc.internal.pageSize.getWidth() - imgWidth) / 2;
-                doc.addImage(imageData, 'PNG', xPos, 10, imgWidth, imgHeight);
 
                 const mainTitle = "Checklist de Proceso Vascular Ecoguiado";
                 const procedureName = procedureSelect.value;
                 const studentName = studentNameInput.value || "No especificado";
-                let yPosition = 15 + imgHeight + 15;
+                
+                // Posición vertical inicial, cerca de la parte superior
+                let yPosition = 25;
 
+                // Dibujar los textos del encabezado
                 doc.setFont("helvetica", "bold"); doc.setFontSize(18);
-                doc.text(mainTitle, doc.internal.pageSize.getWidth() / 2, yPosition, { align: 'center' }); yPosition += 10;
-                doc.setFontSize(16); doc.setTextColor(100);
-                doc.text(procedureName, doc.internal.pageSize.getWidth() / 2, yPosition, { align: 'center' }); yPosition += 15;
-                doc.setFont("helvetica", "normal"); doc.setFontSize(12);
-                doc.text(`Estudiante: ${studentName}`, 15, yPosition); yPosition += 5;
-                doc.setLineWidth(0.5); doc.line(15, yPosition, 195, yPosition); yPosition += 10;
+                doc.text(mainTitle, doc.internal.pageSize.getWidth() / 2, yPosition, { align: 'center' }); 
+                yPosition += 10;
 
+                doc.setFont("helvetica", "normal"); doc.setFontSize(16); doc.setTextColor(100);
+                doc.text(procedureName, doc.internal.pageSize.getWidth() / 2, yPosition, { align: 'center' });
+                yPosition += 20; // Más espacio antes del nombre
+
+                doc.setFontSize(12); doc.setTextColor(0); // Volver a negro
+                doc.text(`Estudiante: ${studentName}`, 15, yPosition); 
+                yPosition += 5;
+
+                doc.setLineWidth(0.5); 
+                doc.line(15, yPosition, 195, yPosition); // (x1, y1, x2, y2)
+                yPosition += 15; // Más espacio antes de la lista
+
+                // Dibujar la lista de items
                 const items = checklist.querySelectorAll('.checklist-item');
                 items.forEach(item => {
                     if (yPosition > 270) { doc.addPage(); yPosition = 20; }
                     const status = item.querySelector('.step-checkbox').checked ? '[X]' : '[ ]';
                     const stepText = item.querySelector('.step-input').value || "(Paso vacío)";
-                    doc.setFont("courier", "normal"); doc.text(status, 20, yPosition);
+                    
+                    doc.setFont("courier", "normal"); 
+                    doc.text(status, 20, yPosition);
+
                     doc.setFont("helvetica", "normal");
                     const textLines = doc.splitTextToSize(stepText, 160);
                     doc.text(textLines, 30, yPosition);
-                    yPosition += (textLines.length * 6) + 4;
+                    yPosition += (textLines.length * 6) + 5;
                 });
                 
                 const slugify = (text) => text.toString().toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '');
                 const fileName = `checklist-${slugify(procedureName)}-${slugify(studentName || 'sin-nombre')}.pdf`;
                 doc.save(fileName);
-                
-                exportBtn.disabled = false;
-                exportBtn.textContent = '📄 Generar y Descargar PDF';
-            });
+
+            } catch (error) {
+                console.error("Error detallado al generar el PDF:", error);
+                alert("Hubo un error al construir el PDF. Revisa la consola (F12) para ver el error específico.");
+            }
         });
 
         // --- Eventos Iniciales ---
